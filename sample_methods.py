@@ -63,9 +63,8 @@
 #   value => $-expression; ...; otherwise-$-expression
 
 
-from collections import namedtuple
+from gssapi_bindings_gen.utils import NotNone
 
-NotNone = namedtuple('NotNone', ['type'])
 
 def init_sec_context(target_name: NotNone('Name'), creds: 'Creds' = None,
                      context: 'SecurityContext' = None, mech: 'OID' = None,
@@ -100,19 +99,18 @@ def init_sec_context(target_name: NotNone('Name'), creds: 'Creds' = None,
     Input Args:
         creds -> [gss_cred_id_t] default(GSS_C_NO_CREDENTIAL)
             # the credenitals to use to initiate the context, or None to use the default credentials
-        context -> [SecurityContext] default(SecurityContext(); $; True); inplace($.raw_ctx)
+        context -> [SecurityContext] default_assign(SecurityContext()); inplace(&$.raw_ctx)
             # the security context to update, or None to create a new context
-        target_name  # should we use this, or the number or the arg
-            # the target for the security context
+        target_name  # the target for the security context
         mech -> [gss_OID] default(GSS_C_NO_OID; &$.raw_oid)
             # the mechanism type for this security context, or not for the default mechanism type
         flags -> [OM_uint32] default(BLAH; IntEnumFlagSet(RequirementFlag, $))
             # an iterable or int of RequirementFlags to request for the security context, or None to use mutual auth and out-of-sequence detection
-        lifetime -> $
+        lifetime -> [OM_uint32] py_ttl_to_c($)
             # the request lifetime of the security context (0 or None mean indefinite)
         channel_bindings
             # the channel bindings (or None for no channel bindings)
-        input_token -> bytes_to_buffer($)
+        input_token
             # the token to use to update the security context, or None if creating a new context
 
     Output Args:
@@ -157,10 +155,11 @@ def accept_sec_context(input_token: NotNone('bytes'),
         BadMechanismError
 
     Input Args:
-        context -> [SecurityContext] default(SecurityContext(); $; True); inplace($.raw_ctx)
+        context -> [SecurityContext] default_assign(SecurityContext()); inplace(&$.raw_ctx)
             # the security context to update
-        acceptor_creds  # the creds to use to accept the context
-        input_token -> bytes_to_buffer($)
+        acceptor_creds -> default(GSS_C_NO_CREDENTIAL)
+            # the creds to use to accept the context
+        input_token
             # the input token to use to update the context
         channel_bindings  # the channel bindings to use
 
@@ -196,7 +195,7 @@ def context_time(context: NotNone('SecurityContext')) -> int:
         context  # the context for which to get the time
 
     Output Args:
-        ttl [OM_uint32; &$]
+        ttl [OM_uint32; &$] -> c_ttl_to_py($)
     """
 
 
