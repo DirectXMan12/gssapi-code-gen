@@ -152,7 +152,7 @@ class FuncProcessor(object):
         name_spec = parts[0]
 
         hook = None
-        is_nullable = False
+        tags = set()
 
         # deal with type annotation
         if name_spec.endswith(']'):
@@ -163,11 +163,10 @@ class FuncProcessor(object):
             annotation_parts = type_annotation_expr.split('; ')
 
             temporary_type = annotation_parts[0]
-            if temporary_type.startswith('nullable: '):
-                is_nullable = True
-                temporary_type = temporary_type[10:]
-            else:
-                is_nullable = False
+
+            if ': ' in temporary_type:
+                tags_raw, temporary_type = temporary_type.split(': ', 1)
+                tags = set(tags_raw.split(', '))
 
             if len(annotation_parts) == 2:
                 initial_value = None
@@ -257,7 +256,7 @@ class FuncProcessor(object):
                            'c_arg_expr': c_arg_expr,
                            'temporary_type': temporary_type,
                            'initial_value': initial_value,
-                           'is_nullable': is_nullable,
+                           'tags': tags,
                            'hook': hook})
 
     def process(self, target):

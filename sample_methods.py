@@ -179,6 +179,38 @@ def accept_sec_context(input_token: NotNone('bytes'),
     """
 
 
+def inquire_context(context: NotNone('SecurityContext'),
+                    initiator_name: bool = True, target_name: bool = True,
+                    lifetime: bool = True, mech: bool = True,
+                    flags: bool = True, locally_init: bool = True,
+                    complete: bool = True) -> 'InquireContextResult':
+
+    """
+    Get information about a security context.
+
+    This method obtains information about a security context, including
+    the initiator and target names, as well as the TTL, mech,
+    flags, and its current state (open vs closed).
+
+    Note: the target name may be None if it would have been GSS_C_NO_NAME
+
+    Raises:
+        MissingContextError
+
+    Input Args:
+        context  # the context in question
+
+    Output Args:
+        initiator_name [optional: gss_name_t; $]
+        target_name [nullable, optional: gss_name_t; $]
+        lifetime [optional: OM_uint32; $] -> c_ttl_to_py($)
+        mech [optional: gss_OID; $]
+        flags [optional: OM_unit32; $] -> IntEnumFlagSet(RequirementFlag, $)
+        locally_init [optional: bint; $] -> $
+        is_complete [optional: bint; $] -> $
+    """
+
+
 def context_time(context: NotNone('SecurityContext')) -> int:
     """
     Get the amount of time for which the given context will remain valid.

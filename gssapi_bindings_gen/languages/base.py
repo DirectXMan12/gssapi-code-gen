@@ -138,7 +138,10 @@ class CodeGenerator(object):
 
                 arg_type_str = ''
                 if arg_type is not None:
-                    arg_type_str = ' (%s)' % arg_type
+                    if isinstance(arg_type, type):
+                        arg_type_str = ' (%s)' % arg_type.__name__
+                    else:
+                        arg_type_str = ' (%s)' % arg_type
 
                 lines.append('    %s%s: %s' % (arg_name, arg_type_str, arg_help))
 

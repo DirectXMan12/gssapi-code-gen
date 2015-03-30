@@ -224,54 +224,94 @@ class CythonCodeGenerator(CodeGenerator):
         if argspec['hook'] is not None:
             return (None, None, None, None, None, argspec['hook'])
         else:
-            prep_line = None
+            prep_lines = []
             if not isinstance(argname, str):
-                # purely output arg
+                # purely computed output arg
                 return (None, None, None, None, argspec['return_expr'], None)
             else:
                 # normal output arg
                 input_name = 'raw_%s' % argname
-                if argspec['temporary_type'] is not None:
-                    prep_line = 'cdef %s %s' % (argspec['temporary_type'], input_name)
-                    if argspec['initial_value'] is not None:
-                        prep_line += ' = %s' % argspec['initial_value']
-
                 c_arg_expr = argspec['c_arg_expr']
+                if argspec['temporary_type'] is not None:
+                    if 'optional' in argspec['tags']:
+                        prep_lines.extend([
+                            'cdef %s %s' % (argspec['temporary_type'], input_name),
+                            'cdef %s *%s_ptr = NULL' % (argspec['temporary_type'], input_name),
+                            'if %s:' % argname,
+                            '    %s_ptr = &%s' % (input_name, input_name),
+                            ''
+                        ])
+                    else:
+                        prep_line = 'cdef %s %s' % (argspec['temporary_type'], input_name)
+                        if argspec['initial_value'] is not None:
+                            prep_line += ' = %s' % argspec['initial_value']
+
+                        prep_lines.append(prep_line)
+
                 if c_arg_expr is not None:
                     c_arg_expr = replace_vars(c_arg_expr, i=input_name)
+
+                output_name = argname
+
+                return_expr = replace_vars(argspec['return_expr'],
+                                           o=output_name, i=input_name)
+
+                null_conditions = []
+                if 'optional' in argspec['tags']:
+                    null_conditions.append(argname)
+
+                if 'nullable' in argspec['tags']:
+                    null_conditions.append('$i is not NULL')
 
                 if argspec['transformer'] is not None:
                     base_initval, initializer, transformer = argspec['transformer']
 
-                    if argspec['is_nullable']:
+                    if 'nullable' in argspec['tags'] or 'optional' in argspec['tags']:
                         initval = 'None'
                     else:
                         initval = base_initval
 
+                    if 'optional' in argspec['tags']:
+                        # with output args tagged 'optional', a func parameter
+                        # with the same name specifies whether or not the method
+                        # should be fetched
+                        output_name = 'output_%s' % argname
+
                     if initializer is not None:
-                        initializer = replace_vars(initializer, initval=initval,
-                                                   o=argname, i=input_name)
+                        initializer = replace_vars(initializer,
+                                                   initval=initval,
+                                                   o=output_name, i=input_name)
 
                     if transformer is not None:
-                        if argspec['is_nullable']:
-                            transformer_indented = ['    ' + line for
-                                                    line in transformer]
+                        transformer_indented = ['    ' + line for
+                                                line in transformer]
 
+                        if null_conditions:
                             transformer = [
-                                'if $i is not NULL:',
+                                'if %s:' % ' and '.join(null_conditions),
                                 '    $o = %s' % base_initval
                             ] + transformer_indented
 
-                        transformer = replace_vars(transformer, o=argname,
+                        transformer = replace_vars(transformer, o=output_name,
                                                    i=input_name)
+                elif null_conditions:
+                    if 'optional' in argspec['tags']:
+                        output_name = 'output_%s' % argname
+
+                    # tagged arguments require a transformer
+                    transformer = replace_vars([
+                        '$o = None',
+                        'if %s:' % ' and '.join(null_conditions),
+                        '   $o = %s' % return_expr
+                    ], o=output_name, i=input_name)
+                    initializer = None
+                    return_expr = output_name
+
                 else:
                     initializer = None
                     transformer = None
 
-                return_expr = replace_vars(argspec['return_expr'],
-                                           o=argname, i=input_name)
-
-                return (prep_line, c_arg_expr, initializer,
+                return (prep_lines, c_arg_expr, initializer,
                         transformer, return_expr, None)
 
     def code_lines(self, target_func, argspecs):
@@ -307,16 +347,13 @@ class CythonCodeGenerator(CodeGenerator):
                 argname, argspec)
 
             if hook is not None:
-                before_lines = hook.before_call()
-                if before_lines is not None:
-                    code_lines.extend(before_lines)
+                prep_code = hook.before_call()
 
                 after_lines = hook.after_call()
                 if after_lines is not None:
                     initializer_lines.extend(after_lines)
 
                 initializer_code = None
-                prep = None
 
                 c_arg_code = hook.for_call()
                 success_code, return_code = hook.for_success()
@@ -326,7 +363,7 @@ class CythonCodeGenerator(CodeGenerator):
                     error_args.extend(err_args)
 
             if prep_code is not None:
-                code_lines.append(prep_code)
+                code_lines.extend(prep_code)
 
             if initializer_code is not None:
                 initializer_lines.append(initializer_code)
@@ -402,9 +439,16 @@ class CythonCodeGenerator(CodeGenerator):
             # TODO(directxman12): deal with kw-only args, variadic args, etc
             if param.annotation is not inspect.Parameter.empty:
                 if isinstance(param.annotation, NotNone):
-                    param_part = '%s %s not None' % (param.annotation.type, param_name)
+                    param_part = '%s %s not None'
+                    param_type = param.annotation.type
                 else:
-                    param_part = '%s %s' % (param.annotation, param_name)
+                    param_type = param.annotation
+                    param_part = '%s %s'
+
+                if isinstance(param_type, type):
+                    param_part = param_part % (param_type.__name__, param_name)
+                else:
+                    param_part = param_part % (param_type, param_name)
             else:
                 param_part = param_name
 
